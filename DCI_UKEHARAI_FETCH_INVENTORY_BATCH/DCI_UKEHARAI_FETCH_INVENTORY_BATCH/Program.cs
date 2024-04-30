@@ -20,18 +20,28 @@ namespace DCI_UKEHARAI_FETCH_INVENTORY_BATCH
             Console.WriteLine("----- Start BATCH ------ ");
             Console.WriteLine("----- For Support Inventory Ukeharai Warning ------ ");
             OracleCommand str = new OracleCommand();
-            str.CommandText = @"select model, pltype, count(serial) cnt,to_char(current_date,'YYYY-MM-DD') as currentDate
-from fh001 
-where comid='DCI' and nwc in ('DCI','SKO')  
-  and locacode like '%'
-group by model, pltype
-order by model";
+            str.CommandText = @"SELECT to_char(current_date,'YYYY-MM-DD') as currentDate,f.model, f.pltype, COUNT(f.serial) wmsQty, NVL(s.loadqty,0) loadqty, (COUNT(f.serial) - NVL(s.loadqty,0)) stkQty
+FROM fh001 f
+LEFT JOIN (SELECT model, pltype, SUM(picqty) loadqty
+           FROM wms_delctn 
+           WHERE comid='DCI' AND cfbit = 'F' AND to_char(cfdate,'yyyymmdd') = :YMD
+           GROUP BY model, pltype ) s ON s.model = f.model AND s.pltype = f.pltype 
+WHERE f.comid='DCI' AND nwc = 'DCI'
+GROUP BY to_char(current_date,'YYYY-MM-DD'),f.model, f.pltype, nvl(s.loadqty,0)";
+            str.Parameters.Add(new OracleParameter(":YMD",DateTime.Now.ToString("yyyyMMdd")));
+
+//            str.CommandText = @"select model, pltype, count(serial) cnt,to_char(current_date,'YYYY-MM-DD') as currentDate
+//from fh001 
+//where comid='DCI' and nwc in ('DCI','SKO')  
+//  and locacode like '%'
+//group by model, pltype
+//order by model";
             DataTable dt = ALPHAPD.Query(str);
             foreach (DataRow dr in dt.Rows)
             {
                 string model = dr["MODEL"].ToString().Trim();
                 string pltype = dr["PLTYPE"].ToString();
-                int cnt = dr["CNT"].ToString() != "" ? int.Parse(dr["CNT"].ToString()) : 0;
+                int cnt = dr["STKQTY"].ToString() != "" ? int.Parse(dr["STKQTY"].ToString()) : 0;
                 string currentDate = dr["CURRENTDATE"].ToString().Replace("-", "");
                 Console.WriteLine($"{model} {pltype} {cnt} {currentDate}");
                 SqlCommand InvExist = new SqlCommand();
